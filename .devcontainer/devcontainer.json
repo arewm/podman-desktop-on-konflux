@@ -1,0 +1,32 @@
+{
+  "name": "Konflux Podman Desktop Build Environment",
+  "image": "quay.io/fedora/fedora:latest",
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "installOhMyZsh": false,
+      "upgradePackages": true
+    },
+    "ghcr.io/devcontainers/features/git:1": {
+      "version": "latest"
+    }
+  },
+  "runArgs": [
+    "--privileged",
+    "--userns=keep-id"
+  ],
+  "mounts": [
+    "source=/var/run/podman/podman.sock,target=/var/run/podman/podman.sock,type=bind"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "redhat.vscode-yaml",
+        "ms-kubernetes-tools.vscode-kubernetes-tools",
+        "tektoncd.tekton-pipelines"
+      ]
+    }
+  },
+  "postCreateCommand": "dnf install -y podman tektoncd-cli kubectl patch git-core && echo 'Development environment ready'",
+  "remoteUser": "vscode"
+}

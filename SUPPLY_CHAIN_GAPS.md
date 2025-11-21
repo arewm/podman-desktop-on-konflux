@@ -10,40 +10,158 @@ This document tracks known supply chain hardening limitations for the Podman Des
 
 ## Active Gaps
 
-### GAP-001: No macOS/Windows VM Infrastructure
+### GAP-001: Upstream npm Package Dependencies Not Reproducible from Source
 
-**Status**: Active | **Risk Level**: Medium | **Discovered**: 2025-01-19
+**Status**: Active | **Risk Level**: Medium | **Discovered**: 2025-11-19
 
 **Description:**
-This PoC currently has no access to macOS or Windows VM infrastructure for native builds, platform-specific signing, or notarization. This limits the ability to produce fully-signed, notarized macOS .dmg/.app bundles and Windows .exe installers.
+Podman Desktop depends on npm packages that are not built from source. These packages are fetched from the npm registry and trusted implicitly, introducing a supply chain risk since they could be compromised at the registry level.
 
 **Root Cause:**
-Konflux infrastructure does not currently provide macOS/Windows VM nodes for this project. Multi-platform controller integration (if available) would require such infrastructure to be provisioned.
+npm ecosystem inherently relies on pre-built packages from centralized registries. Building all transitive dependencies from source would require significant infrastructure and tooling that doesn't exist in the npm ecosystem.
 
 **Current Mitigation:**
-- Focus on Linux-native builds (.AppImage, .flatpak)
-- Evaluate cross-compilation tooling (Wine for Windows, rcodesign for macOS signing) as alternatives
-- Document which platform-specific features cannot be achieved without VMs
+- Use lock files (pnpm-lock.yaml) to pin exact versions and checksums
+- Leverage Konflux's dependency prefetching with checksum verification
+- SBOM generation captures all dependencies for audit
 
 **Potential Future Solutions:**
-- Provision macOS/Windows VMs as Tekton nodes (high infrastructure cost, ongoing maintenance)
-- Use Konflux multi-platform controller if/when it becomes available to this project
-- Implement remote execution via SSH to external VMs (introduces non-hermetic risk, requires strict controls per Principle VI - now removed)
-- Limit PoC scope to Linux-only builds if multi-platform is not critical for validation
+- Implement source-based builds for critical dependencies
+- Use npm package signing and verification tools
+- Advocate for ecosystem-wide reproducible builds in npm
 
 **Risk Assessment:**
-- **Impact if Exploited**: Not a direct security vulnerability; impacts feature completeness rather than security
-- **Likelihood**: N/A (infrastructure limitation, not an attack vector)
-- **Compensating Controls**: Linux builds can demonstrate Konflux capabilities; macOS/Windows gaps are explicitly documented
-
-**Impact on PoC Goals:**
-- **Blocking**: Only if multi-platform builds are required to validate Konflux capabilities
-- **Non-Blocking**: If Linux builds are sufficient to demonstrate hermetic builds, OCI artifacts, Chains integration, and supply chain hardening
-- **Enhancement**: VM infrastructure would improve completeness but may not be essential for initial validation
+- **Impact if Exploited**: Malicious code in dependencies could compromise builds
+- **Likelihood**: Medium (npm registry attacks have occurred historically)
+- **Compensating Controls**: Lock files, checksums, SBOM, provenance attestation
 
 **Related Work:**
-- Multi-platform controller availability assessment
-- Cost/feasibility analysis for VM provisioning
+- npm registry security initiatives
+- Sigstore npm signing integration
+
+---
+
+### GAP-002: Manual Patch Maintenance Without Automated Validation
+
+**Status**: Active | **Risk Level**: Low | **Discovered**: 2025-11-19
+
+**Description:**
+Patches are manually created and maintained. When upstream podman-desktop changes, there is no automated system to validate that patches still apply cleanly or function correctly.
+
+**Root Cause:**
+Patch validation requires understanding semantic changes in upstream code. Automated tools can detect conflicts but not semantic breakage.
+
+**Current Mitigation:**
+- Patches numbered sequentially for deterministic ordering
+- Test patch application with --dry-run before actual application
+- Fail-fast on patch conflicts
+
+**Potential Future Solutions:**
+- Automated testing that validates patch functionality
+- CI checks that test patches against upstream releases
+- Patch regeneration automation
+
+**Risk Assessment:**
+- **Impact if Exploited**: Patch conflicts could cause build failures
+- **Likelihood**: Medium (upstream changes frequently)
+- **Compensating Controls**: Fail-fast error handling, manual testing
+
+**Related Work:**
+- Quilt or similar patch management tools
+- Automated patch rebasing workflows
+
+---
+
+### GAP-003: Build Toolchain Not Hermetically Packaged
+
+**Status**: Active | **Risk Level**: Medium | **Discovered**: 2025-11-19
+
+**Description:**
+Build toolchain (Node.js, pnpm, Electron) is assumed available in Konflux environment but not built from source or hermetically packaged.
+
+**Root Cause:**
+Custom builder images use pre-built toolchain binaries from upstream sources (e.g., Node.js official binaries). Hermetically building the entire toolchain from source is extremely complex.
+
+**Current Mitigation:**
+- Pin specific toolchain versions in custom builder image
+- Validate toolchain presence and versions with fail-fast checks
+- Document toolchain provenance
+
+**Potential Future Solutions:**
+- Build toolchain from source (high complexity)
+- Use hermetically built toolchain distributions if available
+- Improve toolchain validation and integrity checks
+
+**Risk Assessment:**
+- **Impact if Exploited**: Compromised toolchain could inject malicious code
+- **Likelihood**: Low (official Node.js builds are signed and audited)
+- **Compensating Controls**: Version pinning, validation, builder image from trusted source
+
+**Related Work:**
+- Hermetic toolchain initiatives
+- Reproducible builds for compilers and interpreters
+
+---
+
+### GAP-004: Multi-Architecture Builds Deferred
+
+**Status**: Active | **Risk Level**: Low | **Discovered**: 2025-11-19
+
+**Description:**
+Initial implementation focuses on x86_64 Linux builds only. arm64, ppc64le, and other architectures are not supported.
+
+**Root Cause:**
+Multi-architecture builds require either emulation (slow) or native builder nodes for each architecture. This is deferred as an enhancement to keep initial scope manageable.
+
+**Current Mitigation:**
+- Focus on x86_64 Linux (primary platform)
+- Document architecture limitation
+- Design pipeline to support future multi-arch expansion
+
+**Potential Future Solutions:**
+- Add QEMU emulation for cross-architecture builds
+- Provision native builder nodes for arm64/ppc64le
+- Use Konflux multi-platform controller when available
+
+**Risk Assessment:**
+- **Impact if Exploited**: N/A (not a security issue, feature limitation)
+- **Likelihood**: N/A
+- **Compensating Controls**: N/A
+
+**Related Work:**
+- Konflux multi-platform support
+- buildah/podman multi-arch build features
+
+---
+
+### GAP-005: Potential Runtime npm/Electron Downloads Despite Prefetching
+
+**Status**: Active | **Risk Level**: Medium | **Discovered**: 2025-11-19
+
+**Description:**
+Even with dependency prefetching, some npm packages or Electron binaries may attempt runtime downloads during the build phase, breaking network isolation.
+
+**Root Cause:**
+Some npm packages have install scripts that download native binaries at install time. Electron may download binaries despite prefetch if environment variables are not correctly configured.
+
+**Current Mitigation:**
+- Configure ELECTRON_MIRROR and ELECTRON_SKIP_BINARY_DOWNLOAD environment variables
+- Use dependency prefetch task to cache all packages
+- Monitor build logs for unexpected network activity
+
+**Potential Future Solutions:**
+- Enable network-off build execution after prefetch phase
+- Comprehensive testing of offline build scenarios
+- Patch problematic packages to disable runtime downloads
+
+**Risk Assessment:**
+- **Impact if Exploited**: Runtime downloads could fetch compromised binaries
+- **Likelihood**: Medium (depends on package install scripts)
+- **Compensating Controls**: Prefetch checksums, environment variables, monitoring
+
+**Related Work:**
+- Konflux hermetic build capabilities
+- npm offline-mode enhancements
 
 ---
 

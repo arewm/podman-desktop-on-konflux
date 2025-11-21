@@ -1,0 +1,3 @@
+[submodule "podman-desktop"]
+	path = podman-desktop
+	url = https://github.com/podman-desktop/podman-desktop.git
