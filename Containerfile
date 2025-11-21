@@ -1,0 +1,58 @@
+# Containerfile for building Podman Desktop on Konflux
+# Multi-stage build for Node.js application with flatpak packaging
+
+# Stage 1: Build podman-desktop from source
+FROM registry.access.redhat.com/ubi9/nodejs-20:latest AS builder
+
+USER root
+
+# Install build dependencies
+RUN dnf install -y \
+    git \
+    python3 \
+    make \
+    gcc \
+    gcc-c++ \
+    && dnf clean all
+
+# Set working directory
+WORKDIR /workspace
+
+# Copy source code (including submodule)
+COPY --chown=default:root . .
+
+# Check if podman-desktop directory exists and has content
+# If submodule wasn't cloned, we need to handle it
+RUN if [ ! -f "podman-desktop/package.json" ]; then \
+      echo "ERROR: podman-desktop submodule not found or not initialized"; \
+      echo "This build requires the podman-desktop submodule to be cloned"; \
+      exit 1; \
+    fi
+
+# Install pnpm globally
+RUN npm install -g pnpm@latest
+
+# Change to podman-desktop directory
+WORKDIR /workspace/podman-desktop
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Build the application
+RUN pnpm run build
+
+# Stage 2: Create minimal runtime image
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
+
+# Copy built application from builder
+COPY --from=builder /workspace/podman-desktop/dist /app
+
+# Set metadata
+LABEL name="podman-desktop" \
+      vendor="Podman Desktop" \
+      version="1.9.1" \
+      summary="Podman Desktop built via Konflux" \
+      description="Podman Desktop application built from upstream source using Konflux CI/CD"
+
+# Default command (placeholder - this is a desktop app)
+CMD ["/bin/sh", "-c", "echo 'Podman Desktop build artifact - not directly executable in container'"]
