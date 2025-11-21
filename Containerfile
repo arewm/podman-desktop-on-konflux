@@ -21,19 +21,8 @@ WORKDIR /workspace
 # Copy source code (including submodule)
 COPY --chown=default:root . .
 
-# Check if podman-desktop directory exists and has content
-# If submodule wasn't cloned, we need to handle it
-RUN if [ ! -f "podman-desktop/package.json" ]; then \
-      echo "ERROR: podman-desktop submodule not found or not initialized"; \
-      echo "This build requires the podman-desktop submodule to be cloned"; \
-      exit 1; \
-    fi
-
 # Install pnpm globally
 RUN npm install -g pnpm@latest
-
-# Change to podman-desktop directory
-WORKDIR /workspace/podman-desktop
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
@@ -45,7 +34,7 @@ RUN pnpm run build
 FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
 
 # Copy built application from builder
-COPY --from=builder /workspace/podman-desktop/dist /app
+COPY --from=builder /workspace/dist /app
 
 # Set metadata
 LABEL name="podman-desktop" \
