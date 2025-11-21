@@ -1,0 +1,14 @@
+# Example Patch: Placeholder for Build Compatibility
+# Upstream Version: v1.9.1
+# Reason: This is an example patch file to demonstrate the patch application workflow
+# Status: Placeholder - Replace with actual patches as build issues are discovered
+#
+# NOTE: This patch does not modify any files. It serves as a template and validation
+# that the patch application task works correctly.
+#
+# When you discover actual build issues that require patching:
+# 1. Make changes in the podman-desktop submodule
+# 2. Generate a real patch: cd podman-desktop && git diff > ../patches/002-real-fix.patch
+# 3. Remove or replace this example patch
+#
+# For now, this empty patch will pass validation and demonstrate the workflow.
