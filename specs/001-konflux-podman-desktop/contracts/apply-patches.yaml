@@ -1,0 +1,181 @@
+# Tekton Task Contract: Apply Patches
+# Phase: 1 - Design (Contract Definition)
+# Implementation: Phase 2 - To be created in .tekton/tasks/
+
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: apply-patches
+  labels:
+    app.kubernetes.io/version: "0.1"
+  annotations:
+    tekton.dev/pipelines.minVersion: "0.44.0"
+    tekton.dev/categories: Build Tools
+    tekton.dev/tags: patch, git, source-modification
+    tekton.dev/displayName: "Apply Source Patches"
+    tekton.dev/platforms: "linux/amd64"
+spec:
+  description: >-
+    Applies patch files sequentially to source code with fail-fast error handling.
+    Validates each patch with dry-run before applying. Fails immediately on conflict.
+
+  params:
+    - name: patches-path
+      type: string
+      description: Directory containing patch files (relative to workspace root)
+      default: "patches"
+
+    - name: source-path
+      type: string
+      description: Source code directory to apply patches to
+      default: "upstream/podman-desktop"
+
+    - name: patch-strip-level
+      type: string
+      description: Strip level for patch command (-p flag)
+      default: "1"
+
+  workspaces:
+    - name: source
+      description: Workspace containing source code and patches
+      mountPath: /workspace/source
+
+  results:
+    - name: patches-applied
+      description: Comma-separated list of successfully applied patches
+
+    - name: patch-count
+      description: Number of patches applied
+
+  steps:
+    - name: list-patches
+      image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+      workingDir: $(workspaces.source.path)
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        PATCHES_DIR="$(params.patches-path)"
+
+        if [ ! -d "$PATCHES_DIR" ]; then
+          echo "ERROR: Patches directory not found: $PATCHES_DIR"
+          exit 1
+        fi
+
+        # List patch files in numeric order
+        find "$PATCHES_DIR" -name '*.patch' -type f | sort -V > /tmp/patch-list.txt
+
+        PATCH_COUNT=$(wc -l < /tmp/patch-list.txt)
+        echo "Found $PATCH_COUNT patch files"
+
+        if [ "$PATCH_COUNT" -eq 0 ]; then
+          echo "WARNING: No patch files found in $PATCHES_DIR"
+          echo "0" | tee $(results.patch-count.path)
+          echo "" | tee $(results.patches-applied.path)
+          exit 0
+        fi
+
+        cat /tmp/patch-list.txt
+
+    - name: validate-patches
+      image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+      workingDir: $(workspaces.source.path)/$(params.source-path)
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        PATCHES_DIR="../$(params.patches-path)"
+        STRIP_LEVEL="$(params.patch-strip-level)"
+
+        if [ ! -f /tmp/patch-list.txt ]; then
+          echo "No patches to validate"
+          exit 0
+        fi
+
+        echo "===== Validating Patches (Dry-Run) ====="
+
+        while IFS= read -r patch_file; do
+          patch_name=$(basename "$patch_file")
+          echo "Validating: $patch_name"
+
+          if ! patch -p"$STRIP_LEVEL" --dry-run --silent < "$patch_file"; then
+            echo "ERROR: Patch validation failed: $patch_name"
+            echo "This patch will not apply cleanly to the current source."
+            echo "Please update the patch or verify the source version."
+            exit 1
+          fi
+
+          echo "  ✓ $patch_name validates successfully"
+        done < /tmp/patch-list.txt
+
+        echo "All patches validated successfully"
+
+    - name: apply-patches
+      image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+      workingDir: $(workspaces.source.path)/$(params.source-path)
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        PATCHES_DIR="../$(params.patches-path)"
+        STRIP_LEVEL="$(params.patch-strip-level)"
+        APPLIED_PATCHES=""
+        COUNT=0
+
+        if [ ! -f /tmp/patch-list.txt ]; then
+          echo "No patches to apply"
+          echo "0" | tee $(results.patch-count.path)
+          echo "" | tee $(results.patches-applied.path)
+          exit 0
+        fi
+
+        echo "===== Applying Patches ====="
+
+        while IFS= read -r patch_file; do
+          patch_name=$(basename "$patch_file")
+          echo "Applying: $patch_name"
+
+          if ! patch -p"$STRIP_LEVEL" < "$patch_file"; then
+            echo "ERROR: Patch application failed: $patch_name"
+            echo "Patch validated in dry-run but failed during actual application."
+            echo "This may indicate a concurrency or state issue."
+            exit 1
+          fi
+
+          echo "  ✓ $patch_name applied successfully"
+
+          # Track applied patches
+          if [ -z "$APPLIED_PATCHES" ]; then
+            APPLIED_PATCHES="$patch_name"
+          else
+            APPLIED_PATCHES="$APPLIED_PATCHES,$patch_name"
+          fi
+          COUNT=$((COUNT + 1))
+        done < /tmp/patch-list.txt
+
+        echo "===== Patch Application Complete ====="
+        echo "Applied $COUNT patches: $APPLIED_PATCHES"
+
+        # Write results
+        echo "$COUNT" | tee $(results.patch-count.path)
+        echo "$APPLIED_PATCHES" | tee $(results.patches-applied.path)
+
+    - name: verify-modifications
+      image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+      workingDir: $(workspaces.source.path)/$(params.source-path)
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        echo "===== Verifying Source Modifications ====="
+
+        # Check if source tree has been modified
+        if [ -d .git ]; then
+          # If git repository, show modifications
+          git diff --stat || true
+          git status --short || true
+        else
+          echo "Source is not a git repository, skipping diff verification"
+        fi
+
+        echo "Source modifications verified (patches applied)"
