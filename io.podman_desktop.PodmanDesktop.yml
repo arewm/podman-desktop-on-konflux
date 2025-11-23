@@ -1,0 +1,56 @@
+app-id: io.podman_desktop.PodmanDesktop
+runtime: org.freedesktop.Platform
+runtime-version: "24.08"
+sdk: org.freedesktop.Sdk
+base: org.electronjs.Electron2.BaseApp
+base-version: "24.08"
+command: podman-desktop
+separate-locales: false
+finish-args:
+  - --share=ipc
+  - --socket=x11
+  - --socket=wayland
+  - --share=network
+  - --device=all
+  - --filesystem=host
+  - --talk-name=org.freedesktop.Flatpak
+  - --system-talk-name=org.freedesktop.Flatpak
+  - --env=PATH=/app/bin:/usr/bin:/app/extensions/node/bin
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.node22
+
+modules:
+  - name: podman-desktop
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/node22/bin
+      env:
+        NPM_CONFIG_LOGLEVEL: info
+        ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+        ELECTRON_CACHE: /run/build/podman-desktop/electron-cache
+    build-commands:
+      # Install pnpm globally
+      - npm install -g pnpm@10.20.0
+
+      # Install dependencies
+      - cd podman-desktop && pnpm install --frozen-lockfile
+
+      # Build the application
+      - cd podman-desktop && NODE_OPTIONS="--max-old-space-size=4096" pnpm run build
+
+      # Install to /app
+      - mkdir -p /app/podman-desktop
+      - cp -r podman-desktop/packages /app/podman-desktop/
+      - cp -r podman-desktop/extensions /app/podman-desktop/
+
+      # Create wrapper script
+      - |
+        cat > /app/bin/podman-desktop <<'WRAPPER'
+        #!/bin/bash
+        exec /app/extensions/podman-desktop/podman-desktop "$@"
+        WRAPPER
+      - chmod +x /app/bin/podman-desktop
+
+    sources:
+      - type: dir
+        path: .

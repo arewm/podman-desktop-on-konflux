@@ -1,44 +1,39 @@
-# Containerfile for building Podman Desktop on Konflux
-# Multi-stage build for Node.js application with flatpak packaging
+# Containerfile for building Podman Desktop flatpak on Konflux
+# Uses flatpak-builder to create a flatpak bundle from source
 
-# Stage 1: Build podman-desktop from source
-FROM registry.access.redhat.com/ubi10/nodejs-22:latest AS builder
+FROM registry.redhat.io/rhel10/flatpak-sdk:latest
 
 USER root
 
-# Install pnpm for v1.23.1 (packageManager field specifies pnpm@10.20.0)
-# Note: git, python3, make, gcc, gcc-c++ already present in nodejs-20 image
-RUN npm install -g pnpm@10.20.0
+# Install required build tools
+RUN dnf install -y \
+    flatpak-builder \
+    git \
+    curl \
+    jq \
+    && dnf clean all
 
 # Set working directory
 WORKDIR /workspace
 
-# Copy source code (including submodule)
-COPY --chown=default:root . .
+# Copy source code (including submodule and flatpak manifest)
+COPY --chown=root:root . .
 
-# Change to podman-desktop submodule directory
-WORKDIR /workspace/podman-desktop
+# Build the flatpak
+RUN flatpak-builder --repo=/workspace/repo --force-clean /workspace/build io.podman_desktop.PodmanDesktop.yml
 
-# Install dependencies using pnpm
-RUN pnpm install --frozen-lockfile
+# Create flatpak bundle
+RUN flatpak build-bundle /workspace/repo /workspace/podman-desktop.flatpak io.podman_desktop.PodmanDesktop
 
-# Build the application with increased heap size
-ENV NODE_OPTIONS="--max-old-space-size=4096"
-RUN pnpm run build
-
-# Stage 2: Package build artifacts
+# Export the flatpak bundle to final stage
 FROM registry.access.redhat.com/ubi10/ubi-minimal:latest
 
-# Copy all build outputs from podman-desktop packages
-COPY --from=builder /workspace/podman-desktop/packages /app/packages
-COPY --from=builder /workspace/podman-desktop/extensions /app/extensions
+COPY --from=0 /workspace/podman-desktop.flatpak /podman-desktop.flatpak
 
-# Set metadata
-LABEL name="podman-desktop" \
+LABEL name="podman-desktop-flatpak" \
       vendor="Podman Desktop" \
-      version="1.9.1" \
-      summary="Podman Desktop built via Konflux" \
-      description="Podman Desktop application built from upstream source using Konflux CI/CD"
+      version="1.23.1" \
+      summary="Podman Desktop flatpak bundle built via Konflux" \
+      description="Podman Desktop application packaged as flatpak from upstream source using Konflux CI/CD"
 
-# Default command (placeholder - this is a desktop app, not runnable as container)
-CMD ["/bin/sh", "-c", "echo 'Podman Desktop build artifacts packaged successfully'"]
+CMD ["/bin/sh", "-c", "echo 'Podman Desktop flatpak bundle available at /podman-desktop.flatpak'"]
