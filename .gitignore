@@ -138,3 +138,17 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 specs/**/checklists/
+
+# Build artifacts
+build/
+dist/
+*.tmp
+*.swp
+
+# IDE
+.vscode/
+.idea/
+
+# Universal
+.DS_Store
+Thumbs.db

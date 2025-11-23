@@ -93,14 +93,17 @@ As a release engineer, I need the build pipeline to produce a flatpak package fo
 - **FR-010**: System MUST support generating flatpak packages from the built podman-desktop application
 - **FR-011**: Flatpak configuration MUST include all necessary runtime dependencies, environment variables, and permissions for podman-desktop
 - **FR-012**: Build pipeline MUST validate that generated flatpak packages are installable
-- **FR-013**: System MUST maintain build artifacts indefinitely for tagged release builds, and for 2 weeks for non-tagged builds
+- **FR-013**: System MUST maintain build artifacts indefinitely for push and tag events by leaving `image-expires-after` parameter empty; PR builds use default 5-day retention
 - **FR-013a**: System MUST support triggering builds automatically from upstream tagged release events
 - **FR-014**: Build pipeline MUST produce detailed logs for troubleshooting build failures
-- **FR-014a**: Build pipeline MUST validate toolchain version requirements before build and fail fast with clear error messages if versions are missing or incompatible
+- **FR-014a**: Build pipeline MUST fail fast with clear error messages if toolchain requirements are missing or incompatible during build execution
 - **FR-015**: System MUST support triggering builds manually for initial setup and testing
 - **FR-016**: Build pipeline MUST support execution of custom scripts during the build process
+- **FR-016a**: Custom Tekton tasks (apply-patches) MUST implement retry logic for transient failures including network errors and registry timeouts
 - **FR-017**: Flatpak build MUST follow standard flatpak build patterns
 - **FR-018**: System MUST support RPM dependency prefetching if required by build process
+- **FR-019**: Build pipeline MUST leverage Konflux buildah tasks for SBOM generation without custom implementation
+- **FR-020**: Build pipeline MUST use standard Konflux git-clone task with submodules support for upstream source retrieval
 
 ### Key Entities
 
@@ -138,7 +141,7 @@ As a release engineer, I need the build pipeline to produce a flatpak package fo
 - Documentation of build process and troubleshooting
 - Dependency prefetching configuration if needed
 - Configuration of automated builds triggered from upstream tagged release events
-- Build artifact retention policy implementation (indefinite retention for tagged releases, 2-week retention for non-tagged builds)
+- Build artifact retention using Konflux defaults (PR: 5 days, push/tag: indefinite via empty `image-expires-after`)
 - Documentation of tagged release build pattern for Konflux community (if pattern doesn't currently exist)
 
 ### Out of Scope
@@ -151,7 +154,7 @@ As a release engineer, I need the build pipeline to produce a flatpak package fo
 - Security scanning or vulnerability assessment of podman-desktop (beyond build-time checks)
 - Multi-architecture builds beyond x86_64 (arm64, ppc64le support is future work)
 - Windows or macOS builds (Linux flatpak only)
-- Long-term retention of non-tagged build artifacts (retained for 2 weeks, then automatically deleted)
+- Custom artifact retention policies beyond Konflux defaults (PR builds: 5 days, push/tag builds: indefinite)
 
 ## Dependencies & Assumptions *(mandatory)*
 
