@@ -49,7 +49,7 @@ spec:
     - description: Fully Qualified Output Image
       name: output-image
       type: string
-    - default: podman-desktop
+    - default: .
       description: Path to the source code of an application's component from where
         to build image.
       name: path-context

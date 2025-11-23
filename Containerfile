@@ -2,13 +2,13 @@
 # Multi-stage build for Node.js application with flatpak packaging
 
 # Stage 1: Build podman-desktop from source
-FROM registry.access.redhat.com/ubi9/nodejs-20:latest AS builder
+FROM registry.access.redhat.com/ubi10/nodejs-22:latest AS builder
 
 USER root
 
-# Install yarn classic (v1) - upstream uses yarn.lock v1 format
+# Install pnpm for v1.23.1 (packageManager field specifies pnpm@10.20.0)
 # Note: git, python3, make, gcc, gcc-c++ already present in nodejs-20 image
-RUN npm install -g yarn@1.22.22
+RUN npm install -g pnpm@10.20.0
 
 # Set working directory
 WORKDIR /workspace
@@ -19,14 +19,15 @@ COPY --chown=default:root . .
 # Change to podman-desktop submodule directory
 WORKDIR /workspace/podman-desktop
 
-# Install dependencies
-RUN yarn install --frozen-lockfile
+# Install dependencies using pnpm
+RUN pnpm install --frozen-lockfile
 
-# Build the application
-RUN yarn run build
+# Build the application with increased heap size
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+RUN pnpm run build
 
 # Stage 2: Package build artifacts
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
+FROM registry.access.redhat.com/ubi10/ubi-minimal:latest
 
 # Copy all build outputs from podman-desktop packages
 COPY --from=builder /workspace/podman-desktop/packages /app/packages
