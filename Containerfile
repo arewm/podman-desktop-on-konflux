@@ -2,18 +2,13 @@
 # Multi-stage build for Node.js application with flatpak packaging
 
 # Stage 1: Build podman-desktop from source
-FROM quay.io/konflux-ci/yarn3-nodejs20-ubi9-minimal:latest AS builder
+FROM registry.access.redhat.com/ubi9/nodejs-20:latest AS builder
 
 USER root
 
-# Install build dependencies
-RUN microdnf install -y \
-    git \
-    python3 \
-    make \
-    gcc \
-    gcc-c++ \
-    && microdnf clean all
+# Install yarn classic (v1) - upstream uses yarn.lock v1 format
+# Note: git, python3, make, gcc, gcc-c++ already present in nodejs-20 image
+RUN npm install -g yarn@1.22.22
 
 # Set working directory
 WORKDIR /workspace
