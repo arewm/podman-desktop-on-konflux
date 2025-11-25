@@ -1,0 +1,14 @@
+flatpak:
+  id: io.podman_desktop.PodmanDesktop
+  branch: stable
+  labels:
+    summary: Podman Desktop - manage containers and Kubernetes
+    description: >-
+      Podman Desktop is a graphical tool for developing on containers and Kubernetes.
+      It provides a unified interface to manage containers, pods, and Kubernetes clusters.
+    io.k8s.description: *description
+    component: podman-desktop
+  command: /app/bin/podman-desktop
+  packages: ["nodejs"]
+  runtime-name: flatpak-runtime
+  runtime-version: el10
